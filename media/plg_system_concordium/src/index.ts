@@ -36,30 +36,12 @@ interface JoomlaJson<T> {
     data: T
 }
 
+interface AuthJson {
+    redirect: string
+}
 interface NonceJson {
     nonce: string
 }
-//
-// export async function test() {
-//
-//
-//     const metadata = new Metadata();
-//     metadata.add("authentication", "rpcadmin");
-//
-//     const insecureCredentials = credentials.createInsecure();
-//     const client = new ConcordiumNodeClient(
-//         "mainnet1.aesirx.io",    // ip address
-//         9095,          // port
-//         insecureCredentials,
-//         metadata,
-//         15000           // timeout in ms
-//     );
-//
-//     console.log(await client.getConsensusStatus())
-// }
-//
-// test()
-
 export async function run() {
     console.log('ok fine')
 
@@ -104,7 +86,7 @@ export async function run() {
                         const text = res.data.data.nonce
                         const signed: AccountTransactionSignature = await provider.signMessage(accountAddress, text)
 
-                        const res2 = await axios<JoomlaJson<NonceJson>>({
+                        const res2 = await axios<JoomlaJson<AuthJson>>({
                             method: 'post',
                             url: rootUri + 'index.php?option=concordium&task=auth',
                             data: {
@@ -123,6 +105,7 @@ export async function run() {
 
                         btn.disabled = false
 
+                        window.location.href = res2.data.data.redirect
                     })
                     .catch((e) => {
                         console.log(e)

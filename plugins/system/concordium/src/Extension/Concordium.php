@@ -11,12 +11,25 @@ namespace Aesirx\Concordium\Extension;
 
 use Aesirx\Concordium\Table\NonceTable;
 use Concordium\P2PClient;
+use Joomla\CMS\Application\SiteApplication;
+use Joomla\CMS\Authentication\Authentication;
+use Joomla\CMS\Authentication\AuthenticationResponse;
+use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Date\Date;
+use Joomla\CMS\Event\CoreEventAware;
 use Joomla\CMS\Factory;
+use Joomla\CMS\Form\Form;
+use Joomla\CMS\Language\Text;
+use Joomla\CMS\Log\Log;
 use Joomla\CMS\Plugin\CMSPlugin;
+use Joomla\CMS\Plugin\PluginHelper;
 use Joomla\CMS\Response\JsonResponse;
+use Joomla\CMS\Router\Route;
+use Joomla\CMS\Uri\Uri;
+use Joomla\CMS\User\User;
 use Joomla\CMS\User\UserHelper;
 use Joomla\Database\DatabaseAwareTrait;
+use Joomla\Event\DispatcherInterface;
 use Joomla\Event\Event;
 use Joomla\Event\SubscriberInterface;
 use Joomla\Plugin\System\Webauthn\PluginTraits\EventReturnAware;
@@ -32,7 +45,7 @@ defined('_JEXEC') or die;
  */
 class Concordium extends CMSPlugin implements SubscriberInterface
 {
-	use EventReturnAware, DatabaseAwareTrait;
+	use EventReturnAware, DatabaseAwareTrait, CoreEventAware;
 
 	protected $autoloadLanguage = true;
 
@@ -45,17 +58,34 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	private $injectedCSSandJS = false;
 
 	/**
-	 * This method should handle any authentication and report back to the subject
+	 * Constructor
 	 *
-	 * @param array    $credentials Array holding the user credentials
-	 * @param array    $options     Array of extra options
-	 * @param object  &$response    Authentication response object
-	 *
-	 * @return  boolean
+	 * @param DispatcherInterface $subject     The object to observe
+	 * @param array               $config      An optional associative array of configuration settings.
+	 *                                         Recognized key values include 'name', 'group', 'params', 'language'
+	 *                                         (this list is not meant to be comprehensive).
 	 *
 	 * @since   __DEPLOY_VERSION__
 	 */
-	public function onUserAuthenticate($credentials, $options, &$response)
+	public function __construct(&$subject, $config = array())
+	{
+		parent::__construct($subject, $config);
+
+		// Register a debug log file writer
+		$logLevels = Log::ERROR | Log::CRITICAL | Log::ALERT | Log::EMERGENCY;
+
+		if (\defined('JDEBUG') && JDEBUG)
+		{
+			$logLevels = Log::ALL;
+		}
+
+		Log::addLogger([
+			'text_file'         => "concordium_system.php",
+			'text_entry_format' => '{DATETIME}	{PRIORITY} {CLIENTIP}	{MESSAGE}',
+		], $logLevels, ["concordium.system"]);
+	}
+
+	public function onUserAfterLogout($options)
 	{
 
 	}
@@ -140,6 +170,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	 */
 	public function onAfterRoute(): void
 	{
+		/** @var SiteApplication $app */
 		$app   = $this->getApplication();
 		$input = $app->input;
 
@@ -207,13 +238,12 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					}
 
 					$result = [
-						'nonce'  => 'Sign nonce ' . $nonce,
+						'nonce' => $this->getNonceMessage($nonce),
 					];
 					break;
 				case 'auth':
 					$accountAddress = $input->post->getString('accountAddress', '');
 					$signed         = $input->post->get('signed', [], 'array');
-					$text           = $input->post->getString('text', '');
 
 					$nonceTable = new NonceTable($this->getDatabase());
 
@@ -255,30 +285,162 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 						throw new \Exception('Empty result');
 					}
 
-					$res = $this->validate($text, $signed, json_decode($res->getValue(), true));
+					$res = $this->validate(
+						$this->getNonceMessage($nonceTable->get('nonce')),
+						$signed, json_decode($res->getValue(), true)
+					);
 
-					$result = [
-						'valid' => $res
-					];
+					if (!$res)
+					{
+						throw new \Exception('Validation is failed');
+					}
+
+					$app->getSession()->set('plg_system_concordium.auth', true);
+
+					$instance = new User;
+
+					if ($nonceTable->get('user_id'))
+					{
+						if (!$instance->load($nonceTable->get('user_id')))
+						{
+							throw new \Exception('User not found');
+						}
+
+						$response           = new AuthenticationResponse;
+						$response->status   = Authentication::STATUS_SUCCESS;
+						$response->type     = 'Concordium';
+						$response->username = $instance->username;
+						$response->language = $instance->getParam('language');
+
+						$options = [
+							'remember'  => true,
+							'entry_url' => Uri::base() . 'index.php?option=com_users&task=user.login',
+							'action'    => 'core.login.site',
+						];
+
+						PluginHelper::importPlugin('user');
+						$eventClassName = self::getEventClassByEventName('onUserLogin');
+						$event          = new $eventClassName('onUserLogin', [(array) $response, $options]);
+						$dispatched     = $app->getDispatcher()->dispatch($event->getName(), $event);
+						$results        = !isset($dispatched['result']) || \is_null($dispatched['result']) ? [] : $dispatched['result'];
+
+						// If there is no boolean FALSE result from any plugin the login is successful.
+						if (in_array(false, $results, true) === false)
+						{
+							// Set the user in the session, letting Joomla! know that we are logged in.
+							$app->getSession()->set('user', $instance);
+
+							// Trigger the onUserAfterLogin event
+							$options['user']         = $instance;
+							$options['responseType'] = $response['type'];
+
+							// The user is successfully logged in. Run the after login events
+							$eventClassName = self::getEventClassByEventName('onUserAfterLogin');
+							$event          = new $eventClassName('onUserAfterLogin', [$options]);
+							$app->getDispatcher()->dispatch($event->getName(), $event);
+						}
+						else
+						{
+							// If we are here the plugins marked a login failure. Trigger the onUserLoginFailure Event.
+							$eventClassName = self::getEventClassByEventName('onUserLoginFailure');
+							$event          = new $eventClassName('onUserLoginFailure', [$response]);
+							$app->getDispatcher()->dispatch($event->getName(), $event);
+
+							throw new \Exception();
+						}
+
+						$result = [
+							'redirect' => Route::_($app->getUserState('users.login.form.return'), false),
+						];
+					}
+					else
+					{
+						if (ComponentHelper::getParams('com_users')->get('allowUserRegistration') == 0)
+						{
+							throw new \Exception('Registration is not allowed');
+						}
+
+						$app->enqueueMessage('Please fill in required fields to finish registration');
+
+						$result = [
+							'redirect' => Route::_('index.php?option=com_users&task=registration.register', false),
+						];
+					}
 					break;
 			}
 		}
 		catch (\Throwable $e)
 		{
+			Log::add(sprintf("Error: %s", $e->getMessage()), Log::ERROR, 'concordium.system');
+			http_response_code(500);
 			echo new JsonResponse($e);
 
-			$app->close(500);
+			$app->close();
 		}
 
 		echo new JsonResponse($result);
 
-		$app->close(200);
+		$app->close();
 	}
 
 	/**
-	 * @param   string  $message      Message
-	 * @param   array   $signatures   Signatures
-	 * @param   array   $accountInfo  Account info
+	 * @param Event $event Event
+	 *
+	 * @return void
+	 * @since __DEPLOY_VERSION__
+	 */
+	public function onContentPrepareForm(Event $event): void
+	{
+		if (!$this->getApplication()->getSession()->get('plg_system_concordium.auth', false))
+		{
+			return;
+		}
+
+		/**  @var Form $form */
+		list($form) = $event->getArguments();
+
+		if ($form->getName() !== 'com_users.registration')
+		{
+			return;
+		}
+
+		$form->removeField('captcha');
+		$form->setFieldAttribute('password1', 'required', 'false');
+		$form->setFieldAttribute('password2', 'required', 'false');
+	}
+
+	/**
+	 * @param Event $event Event
+	 *
+	 * @return void
+	 * @since __DEPLOY_VERSION__
+	 */
+	public function onUserAfterSave(Event $event): void
+	{
+		if (!$this->getApplication()->getSession()->get('plg_system_concordium.auth', false))
+		{
+			return;
+		}
+
+		//list($getProperties, $isNew, $result, $error) = $event->getArguments();
+	}
+
+	/**
+	 * @param string $nonce Nonce
+	 *
+	 * @return string
+	 *
+	 * @since __DEPLOY_VERSION__
+	 */
+	protected function getNonceMessage(string $nonce): string
+	{
+		return Text::sprintf('PLG_SYSTEM_CONCORDIUM_NONCE_MESSAGE', $nonce);
+	}
+
+	/**
+	 * @param string $message     Message
+	 * @param array  $signatures  Signatures
+	 * @param array  $accountInfo Account info
 	 *
 	 * @return boolean
 	 *
@@ -382,9 +544,11 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 		}
 
 		return [
-			'onUserLoginButtons' => 'onUserLoginButtons',
-			'onUserAuthenticate' => 'onUserAuthenticate',
-			'onAfterRoute'       => 'onAfterRoute',
+			'onUserLoginButtons'   => 'onUserLoginButtons',
+			'onUserAfterLogout'    => 'onUserAfterLogout',
+			'onContentPrepareForm' => 'onContentPrepareForm',
+			'onAfterRoute'         => 'onAfterRoute',
+			'onUserAfterSave'      => 'onUserAfterSave',
 		];
 	}
 }
