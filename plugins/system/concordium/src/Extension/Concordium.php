@@ -19,6 +19,7 @@ use Joomla\CMS\Date\Date;
 use Joomla\CMS\Event\CoreEventAware;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Form\Form;
+use Joomla\CMS\HTML\HTMLHelper;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Log\Log;
 use Joomla\CMS\Plugin\CMSPlugin;
@@ -113,13 +114,22 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 		$randomId = 'plg_system_concordium-' .
 			UserHelper::genRandomPassword(12) . '-' . UserHelper::genRandomPassword(8);
 
+		// Get local path to image
+		$image = HTMLHelper::_('image', 'plg_system_concordium/concordium_black.svg', '', '', true, true);
+
+		// If you can't find the image then skip it
+		$image = $image ? JPATH_ROOT . substr($image, \strlen(Uri::root(true))) : '';
+
+		// Extract image if it exists
+		$image = file_exists($image) ? file_get_contents($image) : '';
+
 		$this->returnFromEvent($event, [
 			[
 				'label'              => 'PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL',
 				'tooltip'            => 'PLG_SYSTEM_CONCORDIUM_LOGIN_DESC',
 				'id'                 => $randomId,
 				'data-webauthn-form' => $form,
-				'image'              => 'plg_system_concordium/concordium.png',
+				'svg'                => $image,
 				'class'              => 'plg_system_concordium_login_button',
 			],
 		]);
