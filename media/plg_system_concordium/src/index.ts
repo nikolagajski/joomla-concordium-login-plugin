@@ -1,15 +1,9 @@
-// https://github.com/Concordium/concordium-browser-wallet/tree/main/packages/browser-wallet-api-helpers
 import {detectConcordiumProvider} from '@concordium/browser-wallet-api-helpers';
-import {AccountTransactionSignature, IdStatement, IdStatementBuilder} from "@concordium/web-sdk";
-import {AccountInfoSimple, AttributesKeys} from "@concordium/common-sdk/lib/types";
-import {AccountInfo, verifyMessageSignature} from "@concordium/common-sdk";
+import {AccountTransactionSignature} from "@concordium/web-sdk";
 import axios from "axios";
-import { credentials, Metadata } from "@grpc/grpc-js";
-import { ConcordiumNodeClient } from "@concordium/node-sdk";
-import {AccountAddress} from "@concordium/common-sdk/lib/types/accountAddress";
 
 interface ConcordiumButton extends HTMLButtonElement{
-    changeContent(value: string, divSelector: string = '.concordiumButtonMessage'): void
+    changeContent(value: string, divSelector?: string): void
 }
 class LoginButtons {
     private buttons: HTMLCollectionOf<ConcordiumButton>;
@@ -35,11 +29,6 @@ class LoginButtons {
     }
 }
 
-// class Concordium {
-//
-// }
-
-//{"success":true,"message":null,"messages":null,"data":{"nonce":"390693"}}
 interface JoomlaJson<T> {
     success: boolean
     message: string | null
@@ -53,6 +42,16 @@ interface AuthJson {
 interface NonceJson {
     nonce: string
 }
+
+interface JoomlaText {
+    _(key: string, def?: string | undefined): string,
+}
+
+interface JoomlaInterface {
+    Text: JoomlaText,
+    getOptions(key: string, def?: any): any,
+}
+
 export async function run() {
     console.log('ok fine')
 
@@ -60,25 +59,36 @@ export async function run() {
     buttons.apply(btn => btn.disabled = true)
 
     // @ts-ignore
-    const rootUri: string = Joomla.getOptions('system.paths').rootFull;
+    const Joomla: JoomlaInterface = window.Joomla
 
     // @ts-ignore
-    Joomla.Text._('')
+    const rootUri: string = Joomla.getOptions('system.paths').rootFull;
+
+    buttons.apply(btn => {
+        btn.disabled = true
+        btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_APP_IS_NOT_INSTALLED'))
+    })
 
     detectConcordiumProvider()
         .then((provider) => {
             // The API is ready for use.
-            async function connect(btn: HTMLButtonElement): Promise<any> {
+            async function connect(btn: ConcordiumButton): Promise<any> {
                 provider
                     .connect()
                     .then(async (accountAddress): Promise<void> => {
+                        btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_SIGNING_NONCE'))
                         // The wallet is connected to the dApp.
-
                         if (accountAddress === undefined) {
-                            return
+                            throw new Error
                         }
 
-                       // btn.disabled = true
+                        const returnInput = btn.form?.querySelector('input[name="return"]')
+                        let returnVal = ''
+
+                        if (returnInput instanceof HTMLInputElement)
+                        {
+                            returnVal = returnInput.value
+                        }
 
                         const res = await axios<JoomlaJson<NonceJson>>({
                             method: 'post',
@@ -92,10 +102,8 @@ export async function run() {
                         });
 
                         if (res.status != 200) {
-                            return
+                            throw new Error
                         }
-
-                        console.log(res)
 
                         const text = res.data.data.nonce
                         const signed: AccountTransactionSignature = await provider.signMessage(accountAddress, text)
@@ -107,6 +115,7 @@ export async function run() {
                                 accountAddress: accountAddress,
                                 signed: signed,
                                 text: text,
+                                return: returnVal,
                             },
                             headers: {
                                 'Content-Type': 'multipart/form-data',
@@ -114,26 +123,30 @@ export async function run() {
                         });
 
                         if (res2.status != 200) {
-                            console.log(res2)
+                            throw new Error
                         }
 
                         btn.disabled = false
+                        btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_SIGNING_NONCE_SIGNED'))
 
-                        window.location.href = res2.data.data.redirect
+                       window.location.href = res2.data.data.redirect
                     })
                     .catch((e) => {
                         console.log(e)
-                        console.log('Connection to the Concordium browser wallet was rejected.')
+                        btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_WALLET_REJECT'))
+                        btn.disabled = false
                     });
             }
 
             buttons.apply(btn => {
                 btn.disabled = false
-                btn.changeContent('Concordium app is not installed')
+                btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL'))
                 btn.addEventListener(
                     'click',
                     (event) => {
                         event.preventDefault()
+                        btn.disabled = true
+                        btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_CONNECTING'))
                         connect(btn)
                     },
                     false
@@ -141,7 +154,6 @@ export async function run() {
             })
         })
         .catch((e) => {
-            console.log(e)
             console.log('Connection to the Concordium browser wallet timed out.')
         });
 }

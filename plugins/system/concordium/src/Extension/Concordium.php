@@ -20,6 +20,7 @@ use Joomla\CMS\Event\CoreEventAware;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Form\Form;
 use Joomla\CMS\HTML\HTMLHelper;
+use Joomla\CMS\Language\Multilanguage;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Log\Log;
 use Joomla\CMS\Plugin\CMSPlugin;
@@ -30,6 +31,7 @@ use Joomla\CMS\Uri\Uri;
 use Joomla\CMS\User\User;
 use Joomla\CMS\User\UserHelper;
 use Joomla\Database\DatabaseAwareTrait;
+use Joomla\Database\ParameterType;
 use Joomla\Event\DispatcherInterface;
 use Joomla\Event\Event;
 use Joomla\Event\SubscriberInterface;
@@ -61,8 +63,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	/**
 	 * Constructor
 	 *
-	 * @param   DispatcherInterface  $subject  The object to observe
-	 * @param   array                $config   An optional associative array of configuration settings.
+	 * @param DispatcherInterface $subject     The object to observe
+	 * @param array               $config      An optional associative array of configuration settings.
 	 *                                         Recognized key values include 'name', 'group', 'params', 'language'
 	 *                                         (this list is not meant to be comprehensive).
 	 *
@@ -94,7 +96,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	/**
 	 * Creates additional login buttons
 	 *
-	 * @param   Event  $event  The event we are handling
+	 * @param Event $event The event we are handling
 	 *
 	 * @return  void
 	 *
@@ -125,7 +127,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 		$this->returnFromEvent($event, [
 			[
-				'label'              => 'PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL',
+				'label'              => 'PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL_WRAPPER',
 				'tooltip'            => 'PLG_SYSTEM_CONCORDIUM_LOGIN_DESC',
 				'id'                 => $randomId,
 				'data-webauthn-form' => $form,
@@ -167,13 +169,14 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 		$wa->useStyle('plg_system_concordium.button')
 			->useScript('plg_system_concordium.login');
-		
-		Text::script('');
 
-//		/** @var SiteApplication $app */
-//		$app = $this->getApplication();
-//
-//		$app->getDocument()->addScriptOptions('uri-root', Uri::root());
+		Text::script('PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL');
+		Text::script('PLG_SYSTEM_CONCORDIUM_APP_IS_NOT_INSTALLED');
+		Text::script('PLG_SYSTEM_CONCORDIUM_CONNECTING');
+		Text::script('PLG_SYSTEM_CONCORDIUM_CONNECTED');
+		Text::script('PLG_SYSTEM_CONCORDIUM_SIGNING_NONCE');
+		Text::script('PLG_SYSTEM_CONCORDIUM_WALLET_REJECT');
+		Text::script('PLG_SYSTEM_CONCORDIUM_SIGNING_NONCE_SIGNED');
 	}
 
 	/**
@@ -255,7 +258,9 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					break;
 				case 'auth':
 					$accountAddress = $input->post->getString('accountAddress', '');
+					$return         = base64_decode($input->post->get('return', '', 'BASE64'));
 					$signed         = $input->post->get('signed', [], 'array');
+					$remember       = $input->post->getBool('remember', false);
 
 					$nonceTable = new NonceTable($this->getDatabase());
 
@@ -307,7 +312,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 						throw new \Exception('Validation is failed');
 					}
 
-					$app->getSession()->set('plg_system_concordium.auth', true);
+					$app->getSession()->set('plg_system_concordium.auth', $accountAddress);
 
 					$instance = new User;
 
@@ -325,10 +330,47 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 						$response->language = $instance->getParam('language');
 
 						$options = [
-							'remember'  => true,
-							'entry_url' => Uri::base() . 'index.php?option=com_users&task=user.login',
-							'action'    => 'core.login.site',
+							'remember' => true,
+							'action'   => 'core.login.site',
 						];
+
+						// Check for a simple menu item id
+						if (is_numeric($return))
+						{
+							$itemId = (int) $return;
+							$return = 'index.php?Itemid=' . $itemId;
+
+							if (Multilanguage::isEnabled()) {
+								$db    = $this->getDatabase();
+								$query = $db->getQuery(true)
+									->select($db->quoteName('language'))
+									->from($db->quoteName('#__menu'))
+									->where($db->quoteName('client_id') . ' = 0')
+									->where($db->quoteName('id') . ' = :id')
+									->bind(':id', $itemId, ParameterType::INTEGER);
+
+								$language = $db->setQuery($query)
+									->loadResult();
+
+								if ($language !== '*')
+								{
+									$return .= '&lang=' . $language;
+								}
+							}
+						} elseif (!Uri::isInternal($return))
+						{
+							// Don't redirect to an external URL.
+							$return = '';
+						}
+
+						// Set the return URL if empty.
+						if (empty($return))
+						{
+							$return = 'index.php?option=com_users&view=profile';
+						}
+
+						// Set the return URL in the user state to allow modification by plugins
+						$app->setUserState('users.login.form.return', $return);
 
 						PluginHelper::importPlugin('user');
 						$eventClassName = self::getEventClassByEventName('onUserLogin');
@@ -344,7 +386,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 							// Trigger the onUserAfterLogin event
 							$options['user']         = $instance;
-							$options['responseType'] = $response['type'];
+							$options['responseType'] = $response->type;
 
 							// The user is successfully logged in. Run the after login events
 							$eventClassName = self::getEventClassByEventName('onUserAfterLogin');
@@ -355,7 +397,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 						{
 							// If we are here the plugins marked a login failure. Trigger the onUserLoginFailure Event.
 							$eventClassName = self::getEventClassByEventName('onUserLoginFailure');
-							$event          = new $eventClassName('onUserLoginFailure', [$response]);
+							$event          = new $eventClassName('onUserLoginFailure', [(array) $response]);
 							$app->getDispatcher()->dispatch($event->getName(), $event);
 
 							throw new \Exception();
@@ -372,10 +414,11 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 							throw new \Exception('Registration is not allowed');
 						}
 
-						$app->enqueueMessage('Please fill in required fields to finish registration');
+						$app->enqueueMessage(Text::_('PLG_SYSTEM_CONCORDIUM_PLEASE_FINISH_REGISTRATION'));
+						$app->getSession()->set('application.queue', $app->getMessageQueue());
 
 						$result = [
-							'redirect' => Route::_('index.php?option=com_users&task=registration.register', false),
+							'redirect' => Route::_('index.php?option=com_users&view=registration', false),
 						];
 					}
 					break;
@@ -396,7 +439,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	}
 
 	/**
-	 * @param   Event  $event  Event
+	 * @param Event $event Event
 	 *
 	 * @return void
 	 * @since __DEPLOY_VERSION__
@@ -422,23 +465,37 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	}
 
 	/**
-	 * @param   Event  $event  Event
+	 * @param Event $event Event
 	 *
 	 * @return void
 	 * @since __DEPLOY_VERSION__
 	 */
 	public function onUserAfterSave(Event $event): void
 	{
-		if (!$this->getApplication()->getSession()->get('plg_system_concordium.auth', false))
+		$accountAddress = $this->getApplication()->getSession()->get('plg_system_concordium.auth', false);
+
+		if (!$accountAddress)
 		{
 			return;
 		}
 
-		//list($getProperties, $isNew, $result, $error) = $event->getArguments();
+		$nonceTable = new NonceTable($this->getDatabase());
+
+		if (!$nonceTable->load(['account_address' => $accountAddress]))
+		{
+			throw new \Exception('Account not found');
+		}
+
+		list($getProperties) = $event->getArguments();
+
+		if (!$nonceTable->save(['user_id' => $getProperties['id']]))
+		{
+			throw new \Exception($nonceTable->getError());
+		}
 	}
 
 	/**
-	 * @param   string  $nonce  Nonce
+	 * @param string $nonce Nonce
 	 *
 	 * @return string
 	 *
@@ -450,9 +507,9 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	}
 
 	/**
-	 * @param   string  $message      Message
-	 * @param   array   $signatures   Signatures
-	 * @param   array   $accountInfo  Account info
+	 * @param string $message     Message
+	 * @param array  $signatures  Signatures
+	 * @param array  $accountInfo Account info
 	 *
 	 * @return boolean
 	 *

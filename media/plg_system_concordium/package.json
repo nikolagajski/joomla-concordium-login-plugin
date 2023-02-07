@@ -10,39 +10,20 @@
   ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "publish-lib": "npm run build && npm publish",
-    "publish-beta": "npm run build && npm publish --tag beta",
-    "publish-dryrun": "npm run build && npm publish --dry-run",
-    "dev": "npx ts-node-dev src/index.ts",
     "watch": "webpack --watch",
-    "start": "webpack serve --open",
-    "build": "webpack"
+    "build": "webpack --mode=production --devtool=eval"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.210",
-    "@types/json-bigint": "^1.0.1",
-    "@types/node": "^18.11.18",
-    "@types/uuid": "^9.0.0",
     "ts-loader": "^9.4.2",
-    "ts-node": "^10.9.1",
-    "ts-node-dev": "^2.0.0",
     "typescript": "^4.9.4",
     "webpack": "^5.75.0",
     "webpack-cli": "^5.0.1"
   },
   "dependencies": {
     "@concordium/browser-wallet-api-helpers": "^2.2.0",
-    "@concordium/browser-wallet-api-types": "^0.1.1",
-    "@concordium/common-sdk": "^6.2.0",
-    "@concordium/node-sdk": "^6.1.0",
-    "@concordium/wallet-connectors": "^0.1.0",
     "@concordium/web-sdk": "^3.2.0",
-    "@grpc/grpc-js": "^1.8.7",
     "axios": "^1.2.6",
-    "buffer": "^6.0.3",
-    "json-bigint": "^1.0.0",
-    "lodash": "^4.17.21",
-    "stream-browserify": "^3.0.0",
-    "uuid": "^9.0.0"
+    "stream-browserify": "^3.0.0"
   }
 }
