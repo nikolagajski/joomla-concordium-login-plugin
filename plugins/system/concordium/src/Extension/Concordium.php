@@ -61,8 +61,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	/**
 	 * Constructor
 	 *
-	 * @param DispatcherInterface $subject     The object to observe
-	 * @param array               $config      An optional associative array of configuration settings.
+	 * @param   DispatcherInterface  $subject  The object to observe
+	 * @param   array                $config   An optional associative array of configuration settings.
 	 *                                         Recognized key values include 'name', 'group', 'params', 'language'
 	 *                                         (this list is not meant to be comprehensive).
 	 *
@@ -94,7 +94,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	/**
 	 * Creates additional login buttons
 	 *
-	 * @param Event $event The event we are handling
+	 * @param   Event  $event  The event we are handling
 	 *
 	 * @return  void
 	 *
@@ -167,6 +167,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 		$wa->useStyle('plg_system_concordium.button')
 			->useScript('plg_system_concordium.login');
+		
+		Text::script('');
 
 //		/** @var SiteApplication $app */
 //		$app = $this->getApplication();
@@ -394,7 +396,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	}
 
 	/**
-	 * @param Event $event Event
+	 * @param   Event  $event  Event
 	 *
 	 * @return void
 	 * @since __DEPLOY_VERSION__
@@ -420,7 +422,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	}
 
 	/**
-	 * @param Event $event Event
+	 * @param   Event  $event  Event
 	 *
 	 * @return void
 	 * @since __DEPLOY_VERSION__
@@ -436,7 +438,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	}
 
 	/**
-	 * @param string $nonce Nonce
+	 * @param   string  $nonce  Nonce
 	 *
 	 * @return string
 	 *
@@ -448,9 +450,9 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	}
 
 	/**
-	 * @param string $message     Message
-	 * @param array  $signatures  Signatures
-	 * @param array  $accountInfo Account info
+	 * @param   string  $message      Message
+	 * @param   array   $signatures   Signatures
+	 * @param   array   $accountInfo  Account info
 	 *
 	 * @return boolean
 	 *

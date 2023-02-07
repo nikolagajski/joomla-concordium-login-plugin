@@ -8,17 +8,28 @@ import { credentials, Metadata } from "@grpc/grpc-js";
 import { ConcordiumNodeClient } from "@concordium/node-sdk";
 import {AccountAddress} from "@concordium/common-sdk/lib/types/accountAddress";
 
+interface ConcordiumButton extends HTMLButtonElement{
+    changeContent(value: string, divSelector: string = '.concordiumButtonMessage'): void
+}
 class LoginButtons {
-    private buttons: HTMLCollectionOf<HTMLButtonElement>;
+    private buttons: HTMLCollectionOf<ConcordiumButton>;
 
     constructor(className: string) {
         // @ts-ignore
         this.buttons = document.getElementsByClassName(className)
+        this.apply(function (n: ConcordiumButton) {
+            // @ts-ignore
+            n.changeContent = function (value: string, selector: string = '.concordiumButtonMessage'): void {
+                const selected = this.querySelector(selector)
+                if (selected) {
+                    selected.innerHTML = value
+                }
+            }
+        })
     }
 
-    public apply(callback: (n: HTMLButtonElement) => void) {
+    public apply(callback: (n: ConcordiumButton) => void) {
         for (var i = 0; i < this.buttons.length; i++) {
-            //this.buttons[i].style.visibility = 'hidden';
             callback(this.buttons[i])
         }
     }
@@ -50,6 +61,9 @@ export async function run() {
 
     // @ts-ignore
     const rootUri: string = Joomla.getOptions('system.paths').rootFull;
+
+    // @ts-ignore
+    Joomla.Text._('')
 
     detectConcordiumProvider()
         .then((provider) => {
@@ -115,6 +129,7 @@ export async function run() {
 
             buttons.apply(btn => {
                 btn.disabled = false
+                btn.changeContent('Concordium app is not installed')
                 btn.addEventListener(
                     'click',
                     (event) => {
