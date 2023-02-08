@@ -1,5 +1,6 @@
 const zip = require("gulp-zip")
-const gulp = require('gulp');
+const gulp = require('gulp')
+const composer = require("gulp-composer")
 
 async function cleanTask() {
     const del = await import("del")
@@ -25,4 +26,19 @@ function compressTask() {
         .pipe(gulp.dest('./dist'));
 }
 
-exports.zip = gulp.series(cleanTask, gulp.parallel(moveMediaFolderTask, movePluginFolderTask), compressTask, cleanTask);
+function composerTask() {
+    return composer({
+        "working-dir": "./dist/plugin"
+    })
+}
+
+exports.zip = gulp.series(
+    cleanTask,
+    gulp.parallel(
+        moveMediaFolderTask,
+        movePluginFolderTask
+    ),
+    composerTask,
+    compressTask,
+    cleanTask
+);
