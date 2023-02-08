@@ -33,8 +33,18 @@
 	<config>
 		<fields name="params">
 			<fieldset name="basic">
-				<field type="text" name="hostname" label="Host Name" />
-				<field type="text" name="nonce_expired" label="Nonce Expiring interval" default="PT10M" />
+				<field type="text"
+					   name="hostname"
+					   label="PLG_SYSTEM_CONCORDIUM_HOSTNAME"
+					   description="PLG_SYSTEM_CONCORDIUM_HOSTNAME_DESC"
+					   required="true"
+				/>
+				<field type="text"
+					   name="nonce_expired"
+					   label="PLG_SYSTEM_CONCORDIUM_NONCE_INTERVAL"
+					   description="PLG_SYSTEM_CONCORDIUM_NONCE_INTERVAL_DESC"
+					   required="true"
+					   default="PT10M" />
 			</fieldset>
 		</fields>
 	</config>

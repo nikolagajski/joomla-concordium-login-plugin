@@ -9,6 +9,9 @@
 
 namespace Aesirx\Concordium\Extension;
 
+use Aesirx\Concordium\Helper;
+use Aesirx\Concordium\Request\AccountInfo\AccountInfo;
+use Aesirx\Concordium\Request\AccountTransactionSignature\AccountTransactionSignature;
 use Aesirx\Concordium\Table\NonceTable;
 use Concordium\P2PClient;
 use Exception;
@@ -37,7 +40,6 @@ use Joomla\Event\DispatcherInterface;
 use Joomla\Event\Event;
 use Joomla\Event\SubscriberInterface;
 use Joomla\Plugin\System\Webauthn\PluginTraits\EventReturnAware;
-use StephenHill\Base58;
 
 defined('_JEXEC') or die;
 
@@ -89,11 +91,6 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 		], $logLevels, ["concordium.system"]);
 	}
 
-	public function onUserAfterLogout($options)
-	{
-
-	}
-
 	/**
 	 * Creates additional login buttons
 	 *
@@ -143,7 +140,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	 *
 	 * @return  void
 	 *
-	 * @since   4.0.0
+	 * @since   __DEPLOY_VERSION__
 	 */
 	private function addLoginCSSAndJavascript(): void
 	{
@@ -214,9 +211,11 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					$accountAddress = $input->getString('accountAddress');
 					$save           = false;
 					$now            = new Date;
+					Log::add('Calling nonce', Log::INFO, 'concordium.system');
 
 					if ($nonceTable->load(['account_address' => $accountAddress]))
 					{
+						Log::add(sprintf('Found nonce record for %s', $accountAddress), Log::INFO, 'concordium.system');
 						$createdAt  = new Date($nonceTable->get('created_at'));
 						$expiryDate = clone $createdAt;
 						$expiryDate->add(
@@ -225,6 +224,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 						if ($now > $expiryDate)
 						{
+							Log::add(sprintf('Nonce expired for %s', $accountAddress), Log::INFO, 'concordium.system');
 							$save = true;
 						}
 						else
@@ -245,6 +245,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					if ($save)
 					{
 						$nonce = sprintf("%06d", rand(0, 999999));
+						Log::add(sprintf('Saving nonce for %s', $accountAddress), Log::INFO, 'concordium.system');
 
 						if (!$nonceTable->save(
 							[
@@ -267,6 +268,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					$return         = base64_decode($input->post->get('return', '', 'BASE64'));
 					$signed         = $input->post->get('signed', [], 'array');
 					$remember       = $input->post->getBool('remember', false);
+
+					Log::add(sprintf('Calling auth for %s', $accountAddress), Log::INFO, 'concordium.system');
 
 					$nonceTable = new NonceTable($this->getDatabase());
 
@@ -297,8 +300,10 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 					if (!$res || $res->getValue() == 'null')
 					{
-						throw new Exception('Empty result');
+						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
 					}
+
+					Log::add('Got consensus status', Log::INFO, 'concordium.system');
 
 					$status = json_decode($res->getValue(), true);
 
@@ -311,15 +316,16 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 					if (!$res || $res->getValue() == 'null')
 					{
-						throw new Exception('Empty result');
+						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
 					}
 
-					$res = $this->validate(
-						$this->getNonceMessage($nonceTable->get('nonce')),
-						$signed, json_decode($res->getValue(), true)
-					);
+					Log::add(sprintf('Got account info for %s', $accountAddress), Log::INFO, 'concordium.system');
 
-					if (!$res)
+					if (!Helper::verifyMessageSignature(
+						$this->getNonceMessage($nonceTable->get('nonce')),
+						new AccountTransactionSignature($signed),
+						new AccountInfo(json_decode($res->getValue(), true))
+					))
 					{
 						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_VALIDATION_IS_FAILED'));
 					}
@@ -352,7 +358,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 							$itemId = (int) $return;
 							$return = 'index.php?Itemid=' . $itemId;
 
-							if (Multilanguage::isEnabled()) {
+							if (Multilanguage::isEnabled())
+							{
 								$db    = $this->getDatabase();
 								$query = $db->getQuery(true)
 									->select($db->quoteName('language'))
@@ -369,7 +376,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 									$return .= '&lang=' . $language;
 								}
 							}
-						} elseif (!Uri::isInternal($return))
+						}
+						elseif (!Uri::isInternal($return))
 						{
 							// Don't redirect to an external URL.
 							$return = '';
@@ -420,6 +428,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 							$app->setUserState('rememberLogin', true);
 						}
 
+						Log::add(sprintf('Redirect %s to after-login page', $accountAddress), Log::INFO, 'concordium.system');
+
 						$result = [
 							'redirect' => Route::_($app->getUserState('users.login.form.return'), false),
 						];
@@ -428,6 +438,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					{
 						$app->enqueueMessage(Text::_('PLG_SYSTEM_CONCORDIUM_PLEASE_FINISH_REGISTRATION'));
 						$app->getSession()->set('application.queue', $app->getMessageQueue());
+
+						Log::add(sprintf('Redirect %s to registration page', $accountAddress), Log::INFO, 'concordium.system');
 
 						$result = [
 							'redirect' => Route::_('index.php?option=com_users&view=registration', false),
@@ -519,94 +531,11 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	}
 
 	/**
-	 * @param string $message     Message
-	 * @param array  $signatures  Signatures
-	 * @param array  $accountInfo Account info
-	 *
-	 * @return boolean
-	 *
-	 * @throws \SodiumException
-	 * @since __DEPLOY_VERSION__
-	 */
-	protected function validate(string $message, array $signatures, array $accountInfo): bool
-	{
-		if (count($signatures) < $accountInfo['accountThreshold'])
-		{
-			// Not enough credentials have signed;
-			return false;
-		}
-
-		$base58 = new Base58;
-
-		$res = substr(
-			substr(
-				$base58->decode($accountInfo['accountAddress']),
-				1
-			),
-			0,
-			-4
-		);
-		$i   = 0;
-
-		while (true)
-		{
-			if ($i >= 8)
-			{
-				break;
-			}
-
-			$res .= chr(0);
-			$i++;
-		}
-
-		$res .= $message;
-
-		$hash = hash('sha256', $res);
-
-		foreach ($signatures as $idx => $credentialSignature)
-		{
-			$credential = $accountInfo['accountCredentials'][$idx];
-
-			if (!$credential)
-			{
-				throw new Exception('Signature contains signature for non-existing credential');
-			}
-
-			$credentialKeys = $credential['value']['contents']['credentialPublicKeys'];
-
-			if (count($credentialSignature) < $credentialKeys['threshold'])
-			{
-				// Not enough signatures for the current credential;
-				return false;
-			}
-
-			foreach ($credentialSignature as $keyIndex => $signature)
-			{
-				if (!array_key_exists($keyIndex, $credentialKeys['keys']))
-				{
-					throw new Exception('Signature contains signature for non-existing keyIndex');
-				}
-
-				if (!sodium_crypto_sign_verify_detached(
-					hex2bin($signature),
-					hex2bin($hash),
-					hex2bin($credentialKeys['keys'][$keyIndex]['verifyKey'])))
-				{
-					// Incorrect signature;
-					return false;
-				}
-			}
-		}
-
-		return true;
-	}
-
-	/**
 	 * Returns an array of events this subscriber will listen to.
 	 *
 	 * @return  array
 	 *
-	 * @since   1.0.0
+	 * @since   __DEPLOY_VERSION__
 	 */
 	public static function getSubscribedEvents(): array
 	{
@@ -626,7 +555,6 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 		return [
 			'onUserLoginButtons'   => 'onUserLoginButtons',
-			'onUserAfterLogout'    => 'onUserAfterLogout',
 			'onContentPrepareForm' => 'onContentPrepareForm',
 			'onAfterRoute'         => 'onAfterRoute',
 			'onUserAfterSave'      => 'onUserAfterSave',

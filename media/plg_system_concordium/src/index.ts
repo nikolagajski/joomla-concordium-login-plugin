@@ -1,6 +1,6 @@
 import {detectConcordiumProvider} from '@concordium/browser-wallet-api-helpers';
 import {AccountTransactionSignature} from "@concordium/web-sdk";
-import axios, {AxiosError} from "axios";
+import axios, {AxiosError, AxiosResponse} from "axios";
 
 interface JoomlaJson<T> {
     success: boolean
@@ -60,12 +60,8 @@ class LoginButtons {
 }
 
 export async function run() {
-    console.log('ok fine')
-
     const buttons = new LoginButtons('plg_system_concordium_login_button')
     buttons.apply(btn => btn.disabled = true)
-
-
 
     // @ts-ignore
     const rootUri: string = Joomla.getOptions('system.paths').rootFull;
@@ -103,7 +99,7 @@ export async function run() {
                             remember = rememberInput.checked
                         }
 
-                        const res = await axios<JoomlaJson<NonceJson>>({
+                        const res:AxiosResponse<JoomlaJson<NonceJson>> = await axios<JoomlaJson<NonceJson>>({
                             method: 'post',
                             url: rootUri + 'index.php?option=concordium&task=nonce',
                             data: {
@@ -114,8 +110,6 @@ export async function run() {
                             }
                         });
 
-                        console.log(res)
-
                         if (res.status != 200) {
                             throw new Error
                         }
@@ -123,7 +117,7 @@ export async function run() {
                         const text = res.data.data.nonce
                         const signed: AccountTransactionSignature = await provider.signMessage(accountAddress, text)
 
-                        const res2 = await axios<JoomlaJson<AuthJson>>({
+                        const res2:AxiosResponse<JoomlaJson<AuthJson>> = await axios<JoomlaJson<AuthJson>>({
                             method: 'post',
                             url: rootUri + 'index.php?option=concordium&task=auth',
                             data: {
