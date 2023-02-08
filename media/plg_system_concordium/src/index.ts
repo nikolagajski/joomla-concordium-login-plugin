@@ -1,33 +1,6 @@
 import {detectConcordiumProvider} from '@concordium/browser-wallet-api-helpers';
 import {AccountTransactionSignature} from "@concordium/web-sdk";
-import axios from "axios";
-
-interface ConcordiumButton extends HTMLButtonElement{
-    changeContent(value: string, divSelector?: string): void
-}
-class LoginButtons {
-    private buttons: HTMLCollectionOf<ConcordiumButton>;
-
-    constructor(className: string) {
-        // @ts-ignore
-        this.buttons = document.getElementsByClassName(className)
-        this.apply(function (n: ConcordiumButton) {
-            // @ts-ignore
-            n.changeContent = function (value: string, selector: string = '.concordiumButtonMessage'): void {
-                const selected = this.querySelector(selector)
-                if (selected) {
-                    selected.innerHTML = value
-                }
-            }
-        })
-    }
-
-    public apply(callback: (n: ConcordiumButton) => void) {
-        for (var i = 0; i < this.buttons.length; i++) {
-            callback(this.buttons[i])
-        }
-    }
-}
+import axios, {AxiosError} from "axios";
 
 interface JoomlaJson<T> {
     success: boolean
@@ -52,14 +25,47 @@ interface JoomlaInterface {
     getOptions(key: string, def?: any): any,
 }
 
+// @ts-ignore
+const Joomla: JoomlaInterface = window.Joomla
+
+interface ConcordiumButton extends HTMLButtonElement{
+    changeContent(value: string, divSelector?: string): void
+}
+class LoginButtons {
+    private buttons: HTMLCollectionOf<ConcordiumButton>;
+
+    constructor(className: string) {
+        // @ts-ignore
+        this.buttons = document.getElementsByClassName(className)
+        this.apply(function (n: ConcordiumButton) {
+            n.innerHTML = n.innerHTML.replace(
+                Joomla.Text._('PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL'),
+                '<span class="concordiumButtonMessage">' + Joomla.Text._('PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL') + '</span>');
+
+            // @ts-ignore
+            n.changeContent = function (value: string, selector: string = '.concordiumButtonMessage'): void {
+                const selected = this.querySelector(selector)
+                if (selected) {
+                    selected.innerHTML = value
+                }
+            }
+        })
+    }
+
+    public apply(callback: (n: ConcordiumButton) => void) {
+        for (var i = 0; i < this.buttons.length; i++) {
+            callback(this.buttons[i])
+        }
+    }
+}
+
 export async function run() {
     console.log('ok fine')
 
     const buttons = new LoginButtons('plg_system_concordium_login_button')
     buttons.apply(btn => btn.disabled = true)
 
-    // @ts-ignore
-    const Joomla: JoomlaInterface = window.Joomla
+
 
     // @ts-ignore
     const rootUri: string = Joomla.getOptions('system.paths').rootFull;
@@ -83,11 +89,18 @@ export async function run() {
                         }
 
                         const returnInput = btn.form?.querySelector('input[name="return"]')
+                        const rememberInput = btn.form?.querySelector('input[name="remember"]')
                         let returnVal = ''
+                        let remember  = false
 
                         if (returnInput instanceof HTMLInputElement)
                         {
                             returnVal = returnInput.value
+                        }
+
+                        if (rememberInput instanceof HTMLInputElement)
+                        {
+                            remember = rememberInput.checked
                         }
 
                         const res = await axios<JoomlaJson<NonceJson>>({
@@ -100,6 +113,8 @@ export async function run() {
                                 'Content-Type': 'multipart/form-data',
                             }
                         });
+
+                        console.log(res)
 
                         if (res.status != 200) {
                             throw new Error
@@ -116,6 +131,7 @@ export async function run() {
                                 signed: signed,
                                 text: text,
                                 return: returnVal,
+                                remember: remember,
                             },
                             headers: {
                                 'Content-Type': 'multipart/form-data',
@@ -131,9 +147,14 @@ export async function run() {
 
                        window.location.href = res2.data.data.redirect
                     })
-                    .catch((e) => {
-                        console.log(e)
-                        btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_WALLET_REJECT'))
+                    .catch((e: AxiosError | Error) => {
+                        if (e instanceof AxiosError
+                            && e.response && e.response.data && e.response.data.message) {
+                            btn.changeContent(e.response.data.message)
+                        } else {
+                            btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_WALLET_REJECT'))
+                        }
+
                         btn.disabled = false
                     });
             }

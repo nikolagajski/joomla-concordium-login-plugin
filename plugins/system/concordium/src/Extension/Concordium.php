@@ -11,6 +11,7 @@ namespace Aesirx\Concordium\Extension;
 
 use Aesirx\Concordium\Table\NonceTable;
 use Concordium\P2PClient;
+use Exception;
 use Joomla\CMS\Application\SiteApplication;
 use Joomla\CMS\Authentication\Authentication;
 use Joomla\CMS\Authentication\AuthenticationResponse;
@@ -127,7 +128,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 		$this->returnFromEvent($event, [
 			[
-				'label'              => 'PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL_WRAPPER',
+				'label'              => 'PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL',
 				'tooltip'            => 'PLG_SYSTEM_CONCORDIUM_LOGIN_DESC',
 				'id'                 => $randomId,
 				'data-webauthn-form' => $form,
@@ -196,7 +197,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 		if ($input->getMethod() !== 'POST')
 		{
-			throw new \Exception('Permission denied');
+			throw new Exception('Permission denied');
 		}
 
 		require_once JPATH_PLUGINS . '/system/concordium/vendor/autoload.php';
@@ -233,6 +234,11 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					}
 					else
 					{
+						if (ComponentHelper::getParams('com_users')->get('allowUserRegistration') == 0)
+						{
+							throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
+						}
+
 						$save = true;
 					}
 
@@ -248,7 +254,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 							]
 						))
 						{
-							throw new \Exception($nonceTable->getError());
+							throw new Exception($nonceTable->getError());
 						}
 					}
 
@@ -266,7 +272,13 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 					if (!$nonceTable->load(['account_address' => $accountAddress]))
 					{
-						throw new \Exception('Account not found');
+						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
+					}
+
+					if (!$nonceTable->get('user_id')
+						&& ComponentHelper::getParams('com_users')->get('allowUserRegistration') == 0)
+					{
+						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
 					}
 
 					$client = new P2PClient(
@@ -285,7 +297,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 					if (!$res || $res->getValue() == 'null')
 					{
-						throw new \Exception('Empty result');
+						throw new Exception('Empty result');
 					}
 
 					$status = json_decode($res->getValue(), true);
@@ -299,7 +311,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 					if (!$res || $res->getValue() == 'null')
 					{
-						throw new \Exception('Empty result');
+						throw new Exception('Empty result');
 					}
 
 					$res = $this->validate(
@@ -309,18 +321,18 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 					if (!$res)
 					{
-						throw new \Exception('Validation is failed');
+						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_VALIDATION_IS_FAILED'));
 					}
 
 					$app->getSession()->set('plg_system_concordium.auth', $accountAddress);
 
-					$instance = new User;
-
 					if ($nonceTable->get('user_id'))
 					{
+						$instance = new User;
+
 						if (!$instance->load($nonceTable->get('user_id')))
 						{
-							throw new \Exception('User not found');
+							throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
 						}
 
 						$response           = new AuthenticationResponse;
@@ -330,7 +342,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 						$response->language = $instance->getParam('language');
 
 						$options = [
-							'remember' => true,
+							'remember' => $remember,
 							'action'   => 'core.login.site',
 						];
 
@@ -400,7 +412,12 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 							$event          = new $eventClassName('onUserLoginFailure', [(array) $response]);
 							$app->getDispatcher()->dispatch($event->getName(), $event);
 
-							throw new \Exception();
+							throw new Exception();
+						}
+
+						if ($options['remember'] == true)
+						{
+							$app->setUserState('rememberLogin', true);
 						}
 
 						$result = [
@@ -409,11 +426,6 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					}
 					else
 					{
-						if (ComponentHelper::getParams('com_users')->get('allowUserRegistration') == 0)
-						{
-							throw new \Exception('Registration is not allowed');
-						}
-
 						$app->enqueueMessage(Text::_('PLG_SYSTEM_CONCORDIUM_PLEASE_FINISH_REGISTRATION'));
 						$app->getSession()->set('application.queue', $app->getMessageQueue());
 
@@ -483,14 +495,14 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 		if (!$nonceTable->load(['account_address' => $accountAddress]))
 		{
-			throw new \Exception('Account not found');
+			throw new Exception('Account not found');
 		}
 
 		list($getProperties) = $event->getArguments();
 
 		if (!$nonceTable->save(['user_id' => $getProperties['id']]))
 		{
-			throw new \Exception($nonceTable->getError());
+			throw new Exception($nonceTable->getError());
 		}
 	}
 
@@ -557,7 +569,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 			if (!$credential)
 			{
-				throw new \Exception('Signature contains signature for non-existing credential');
+				throw new Exception('Signature contains signature for non-existing credential');
 			}
 
 			$credentialKeys = $credential['value']['contents']['credentialPublicKeys'];
@@ -572,7 +584,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 			{
 				if (!array_key_exists($keyIndex, $credentialKeys['keys']))
 				{
-					throw new \Exception('Signature contains signature for non-existing keyIndex');
+					throw new Exception('Signature contains signature for non-existing keyIndex');
 				}
 
 				if (!sodium_crypto_sign_verify_detached(
@@ -602,7 +614,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 		{
 			$app = Factory::getApplication();
 		}
-		catch (\Exception $e)
+		catch (Exception $e)
 		{
 			return [];
 		}
