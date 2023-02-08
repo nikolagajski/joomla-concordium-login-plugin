@@ -155,18 +155,12 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 		/** @var \Joomla\CMS\WebAsset\WebAssetManager $wa */
 		$wa = $this->getApplication()->getDocument()->getWebAssetManager();
 
-		if (!$wa->assetExists('style', 'plg_system_concordium.button'))
-		{
-			$wa->registerStyle('plg_system_concordium.button', 'plg_system_concordium/button.css');
-		}
-
 		if (!$wa->assetExists('script', 'plg_system_concordium.login'))
 		{
 			$wa->registerScript('plg_system_concordium.login', 'plg_system_concordium/login.js', [], ['defer' => true], ['core']);
 		}
 
-		$wa->useStyle('plg_system_concordium.button')
-			->useScript('plg_system_concordium.login');
+		$wa->useScript('plg_system_concordium.login');
 
 		Text::script('PLG_SYSTEM_CONCORDIUM_LOGIN_LABEL');
 		Text::script('PLG_SYSTEM_CONCORDIUM_APP_IS_NOT_INSTALLED');

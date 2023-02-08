@@ -30,6 +30,10 @@
 			<file charset="utf8" driver="mysql">sql/uninstall.sql</file>
 		</sql>
 	</uninstall>
+	<media folder="media" destination="plg_system_concordium">
+		<folder>images</folder>
+		<folder>js</folder>
+	</media>
 	<config>
 		<fields name="params">
 			<fieldset name="basic">

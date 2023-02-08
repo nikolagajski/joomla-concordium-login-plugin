@@ -2,7 +2,7 @@ const path = require('path');
 const CompressionPlugin = require("compression-webpack-plugin");
 
 module.exports = {
-	entry: './src/index.ts',
+	entry: './media/plg_system_concordium/src/index.ts',
 	module: {
 		rules: [
 			{
@@ -20,7 +20,7 @@ module.exports = {
 	},
 	output: {
 		filename: 'login.js',
-		path: path.resolve(__dirname, 'js'),
+		path: path.resolve(__dirname, 'media/plg_system_concordium/js'),
 	},
 	mode: 'development',
 	devtool: 'inline-source-map',
