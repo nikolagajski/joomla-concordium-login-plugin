@@ -4,8 +4,60 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "33858607cfd2bdfacd1205113b174678",
+    "content-hash": "c01e087cc30f01af248ebaee2892f2aa",
     "packages": [
+        {
+            "name": "aesirxio/concordium-lib",
+            "version": "dev-develop",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/aesirxio/concordium-php-lib.git",
+                "reference": "72388128029082f1a48884eee89bf1a0fa4ba4d7"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/aesirxio/concordium-php-lib/zipball/72388128029082f1a48884eee89bf1a0fa4ba4d7",
+                "reference": "72388128029082f1a48884eee89bf1a0fa4ba4d7",
+                "shasum": ""
+            },
+            "require": {
+                "ext-bcmath": "*",
+                "ext-grpc": "*",
+                "ext-sodium": "*",
+                "google/protobuf": "~3.21.12",
+                "grpc/grpc": "~1.42.0",
+                "php": ">=7.2",
+                "stephenhill/base58": "^1.1"
+            },
+            "default-branch": true,
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Concordium\\": "grpc/Concordium/",
+                    "GPBMetadata\\": "grpc/GPBMetadata/",
+                    "Aesirx\\Concordium\\": "src/"
+                }
+            },
+            "license": [
+                "GNU General Public License v3.0"
+            ],
+            "authors": [
+                {
+                    "name": "Volodymyr Shandak",
+                    "email": "vladimir@redweb.dk"
+                }
+            ],
+            "description": "gRPC PHP client for concordium with useful helpers",
+            "keywords": [
+                "concordium",
+                "rpc"
+            ],
+            "support": {
+                "source": "https://github.com/aesirxio/concordium-php-lib/tree/develop",
+                "issues": "https://github.com/aesirxio/concordium-php-lib/issues"
+            },
+            "time": "2023-02-09T14:45:35+00:00"
+        },
         {
             "name": "google/protobuf",
             "version": "v3.21.12",
@@ -96,7 +148,7 @@
         },
         {
             "name": "stephenhill/base58",
-            "version": "v1.1.5",
+            "version": "v1.1.5.x-dev",
             "source": {
                 "type": "git",
                 "url": "https://github.com/stephen-hill/base58php.git",
@@ -139,8 +191,10 @@
     ],
     "packages-dev": [],
     "aliases": [],
-    "minimum-stability": "stable",
-    "stability-flags": [],
+    "minimum-stability": "dev",
+    "stability-flags": {
+        "aesirxio/concordium-lib": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": [],

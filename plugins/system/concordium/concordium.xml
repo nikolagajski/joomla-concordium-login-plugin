@@ -14,7 +14,6 @@
 	<files>
 		<folder plugin="concordium">services</folder>
 		<filename>concordium.xml</filename>
-		<folder>grpc</folder>
 		<folder>language</folder>
 		<folder>sql</folder>
 		<folder>vendor</folder>
