@@ -15,11 +15,5 @@
       "type": "vcs",
       "url": "https://github.com/aesirxio/concordium-php-lib"
     }
-  ],
-  "autoload": {
-    "psr-4": {
-      "Concordium\\": "grpc/Concordium/",
-      "GPBMetadata\\": "grpc/GPBMetadata/"
-    }
-  }
+  ]
 }
