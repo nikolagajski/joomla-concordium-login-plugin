@@ -5,9 +5,6 @@
   "license": "proprietary",
   "authors": [],
   "require": {
-    "grpc/grpc": "~1.42.0",
-    "google/protobuf": "~3.21.12",
-    "stephenhill/base58": "^1.1",
     "aesirxio/concordium-lib": "dev-develop"
   },
   "repositories": [

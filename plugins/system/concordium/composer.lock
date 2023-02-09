@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c01e087cc30f01af248ebaee2892f2aa",
+    "content-hash": "7ee55490e0b0e3c04b6a1652443f46c8",
     "packages": [
         {
             "name": "aesirxio/concordium-lib",
