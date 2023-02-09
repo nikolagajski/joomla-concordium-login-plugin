@@ -12,6 +12,7 @@ interface JoomlaJson<T> {
 interface AuthJson {
     redirect: string
 }
+
 interface NonceJson {
     nonce: string
 }
@@ -22,15 +23,17 @@ interface JoomlaText {
 
 interface JoomlaInterface {
     Text: JoomlaText,
+
     getOptions(key: string, def?: any): any,
 }
 
 // @ts-ignore
 const Joomla: JoomlaInterface = window.Joomla
 
-interface ConcordiumButton extends HTMLButtonElement{
+interface ConcordiumButton extends HTMLButtonElement {
     changeContent(value: string, divSelector?: string): void
 }
+
 class LoginButtons {
     private buttons: HTMLCollectionOf<ConcordiumButton>;
 
@@ -64,7 +67,7 @@ export async function run() {
     buttons.apply(btn => btn.disabled = true)
 
     // @ts-ignore
-    const rootUri: string = Joomla.getOptions('system.paths').rootFull;
+    const rootUri: string = Joomla.getOptions('system.paths').baseFull;
 
     buttons.apply(btn => {
         btn.disabled = true
@@ -87,19 +90,17 @@ export async function run() {
                         const returnInput = btn.form?.querySelector('input[name="return"]')
                         const rememberInput = btn.form?.querySelector('input[name="remember"]')
                         let returnVal = ''
-                        let remember  = false
+                        let remember = false
 
-                        if (returnInput instanceof HTMLInputElement)
-                        {
+                        if (returnInput instanceof HTMLInputElement) {
                             returnVal = returnInput.value
                         }
 
-                        if (rememberInput instanceof HTMLInputElement)
-                        {
+                        if (rememberInput instanceof HTMLInputElement) {
                             remember = rememberInput.checked
                         }
 
-                        const res:AxiosResponse<JoomlaJson<NonceJson>> = await axios<JoomlaJson<NonceJson>>({
+                        const res: AxiosResponse<JoomlaJson<NonceJson>> = await axios<JoomlaJson<NonceJson>>({
                             method: 'post',
                             url: rootUri + 'index.php?option=concordium&task=nonce',
                             data: {
@@ -117,7 +118,7 @@ export async function run() {
                         const text = res.data.data.nonce
                         const signed: AccountTransactionSignature = await provider.signMessage(accountAddress, text)
 
-                        const res2:AxiosResponse<JoomlaJson<AuthJson>> = await axios<JoomlaJson<AuthJson>>({
+                        const res2: AxiosResponse<JoomlaJson<AuthJson>> = await axios<JoomlaJson<AuthJson>>({
                             method: 'post',
                             url: rootUri + 'index.php?option=concordium&task=auth',
                             data: {
@@ -139,9 +140,10 @@ export async function run() {
                         btn.disabled = false
                         btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_SIGNING_NONCE_SIGNED'))
 
-                       window.location.href = res2.data.data.redirect
+                        window.location.href = res2.data.data.redirect
                     })
                     .catch((e: AxiosError | Error) => {
+                        btn.classList.replace("btn-secondary", "btn-warning")
                         if (e instanceof AxiosError
                             && e.response && e.response.data && e.response.data.message) {
                             btn.changeContent(e.response.data.message)
@@ -159,6 +161,7 @@ export async function run() {
                 btn.addEventListener(
                     'click',
                     (event) => {
+                        btn.classList.replace("btn-warning", "btn-secondary")
                         event.preventDefault()
                         btn.disabled = true
                         btn.changeContent(Joomla.Text._('PLG_SYSTEM_CONCORDIUM_CONNECTING'))

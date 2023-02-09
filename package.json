@@ -1,7 +1,7 @@
 {
-  "name": "aesirx_migrator",
+  "name": "concordium_login",
   "version": "1.0.0",
-  "description": "Migrate CMS content to AesirX!",
+  "description": "Login via concordium",
   "private": true,
   "type": "commonjs",
   "types": "src/index.d.ts",

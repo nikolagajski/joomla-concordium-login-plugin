@@ -32,6 +32,11 @@ function composerTask() {
     })
 }
 
+async function cleanComposerTask() {
+    const del = await import("del")
+    return del.deleteAsync('./dist/plugin/composer.*', {force:true});
+}
+
 exports.zip = gulp.series(
     cleanTask,
     gulp.parallel(
@@ -39,6 +44,7 @@ exports.zip = gulp.series(
         movePluginFolderTask
     ),
     composerTask,
+    cleanComposerTask,
     compressTask,
     cleanTask
 );

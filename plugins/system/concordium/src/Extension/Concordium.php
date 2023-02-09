@@ -9,12 +9,14 @@
 
 namespace Aesirx\Concordium\Extension;
 
+use Aesirx\Concordium\Exception\ResponseException;
 use Aesirx\Concordium\Helper;
 use Aesirx\Concordium\Request\AccountInfo\AccountInfo;
 use Aesirx\Concordium\Request\AccountTransactionSignature\AccountTransactionSignature;
 use Aesirx\Concordium\Table\NonceTable;
 use Concordium\P2PClient;
 use Exception;
+use Joomla\CMS\Application\CMSApplication;
 use Joomla\CMS\Application\SiteApplication;
 use Joomla\CMS\Authentication\Authentication;
 use Joomla\CMS\Authentication\AuthenticationResponse;
@@ -44,6 +46,8 @@ use Joomla\Plugin\System\Webauthn\PluginTraits\EventReturnAware;
 defined('_JEXEC') or die;
 
 /**
+ * @method CMSApplication getApplication()
+ *
  * Class Concordium
  * @package Aesirx\Concordium
  *
@@ -196,6 +200,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 		$result = [];
 
+		$isFrontend = $app->isClient('site');
+
 		try
 		{
 			switch ($input->getString('task'))
@@ -228,11 +234,6 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					}
 					else
 					{
-						if (ComponentHelper::getParams('com_users')->get('allowUserRegistration') == 0)
-						{
-							throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
-						}
-
 						$save = true;
 					}
 
@@ -253,9 +254,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 						}
 					}
 
-					$result = [
-						'nonce' => $this->getNonceMessage($nonce),
-					];
+					$result['nonce'] = $this->getNonceMessage($nonce);
 					break;
 				case 'auth':
 					$accountAddress = $input->post->getString('accountAddress', '');
@@ -269,14 +268,10 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 					if (!$nonceTable->load(['account_address' => $accountAddress]))
 					{
-						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
+						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
 					}
 
-					if (!$nonceTable->get('user_id')
-						&& ComponentHelper::getParams('com_users')->get('allowUserRegistration') == 0)
-					{
-						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
-					}
+					$app->getSession()->set('plg_system_concordium.user_id', $nonceTable->get('user_id'));
 
 					$client = new P2PClient(
 						$this->params->get('hostname'),
@@ -289,12 +284,18 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 							}
 						]
 					);
+
+					$opt = [
+						// 5 seconds in milliseconds
+						'timeout' => 5000000,
+					];
+
 					/** @var \Concordium\JsonResponse $res */
-					list($res) = $client->GetConsensusStatus(new \Concordium\PBEmpty)->wait();
+					list($res, $res2) = $client->GetConsensusStatus(new \Concordium\PBEmpty, [], $opt)->wait();
 
 					if (!$res || $res->getValue() == 'null')
 					{
-						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
+						throw new ResponseException($res2, Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
 					}
 
 					Log::add('Got consensus status', Log::INFO, 'concordium.system');
@@ -302,15 +303,17 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					$status = json_decode($res->getValue(), true);
 
 					/** @var \Concordium\JsonResponse $res3 */
-					list($res) = $client->GetAccountInfo(
+					list($res, $res2) = $client->GetAccountInfo(
 						(new \Concordium\GetAddressInfoRequest)
 							->setAddress($accountAddress)
-							->setBlockHash($status['lastFinalizedBlock'])
+							->setBlockHash($status['lastFinalizedBlock']),
+						[],
+						$opt
 					)->wait();
 
 					if (!$res || $res->getValue() == 'null')
 					{
-						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
+						throw new ResponseException($res2, Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
 					}
 
 					Log::add(sprintf('Got account info for %s', $accountAddress), Log::INFO, 'concordium.system');
@@ -324,7 +327,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_VALIDATION_IS_FAILED'));
 					}
 
-					$app->getSession()->set('plg_system_concordium.auth', $accountAddress);
+					$app->getSession()->set('plg_system_concordium.account_address', $accountAddress);
 
 					if ($nonceTable->get('user_id'))
 					{
@@ -332,7 +335,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 						if (!$instance->load($nonceTable->get('user_id')))
 						{
-							throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
+							throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_JOOMLA_ACCOUNT_NOT_FOUND'));
 						}
 
 						$response           = new AuthenticationResponse;
@@ -341,50 +344,65 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 						$response->username = $instance->username;
 						$response->language = $instance->getParam('language');
 
-						$options = [
-							'remember' => $remember,
-							'action'   => 'core.login.site',
-						];
-
-						// Check for a simple menu item id
-						if (is_numeric($return))
+						if ($isFrontend)
 						{
-							$itemId = (int) $return;
-							$return = 'index.php?Itemid=' . $itemId;
+							$options = [
+								'remember' => $remember,
+								'action'   => 'core.login.site',
+							];
 
-							if (Multilanguage::isEnabled())
+							// Check for a simple menu item id
+							if (is_numeric($return))
 							{
-								$db    = $this->getDatabase();
-								$query = $db->getQuery(true)
-									->select($db->quoteName('language'))
-									->from($db->quoteName('#__menu'))
-									->where($db->quoteName('client_id') . ' = 0')
-									->where($db->quoteName('id') . ' = :id')
-									->bind(':id', $itemId, ParameterType::INTEGER);
+								$itemId = (int) $return;
+								$return = 'index.php?Itemid=' . $itemId;
 
-								$language = $db->setQuery($query)
-									->loadResult();
-
-								if ($language !== '*')
+								if (Multilanguage::isEnabled())
 								{
-									$return .= '&lang=' . $language;
+									$db    = $this->getDatabase();
+									$query = $db->getQuery(true)
+										->select($db->quoteName('language'))
+										->from($db->quoteName('#__menu'))
+										->where($db->quoteName('client_id') . ' = 0')
+										->where($db->quoteName('id') . ' = :id')
+										->bind(':id', $itemId, ParameterType::INTEGER);
+
+									$language = $db->setQuery($query)
+										->loadResult();
+
+									if ($language !== '*')
+									{
+										$return .= '&lang=' . $language;
+									}
 								}
 							}
-						}
-						elseif (!Uri::isInternal($return))
-						{
-							// Don't redirect to an external URL.
-							$return = '';
-						}
+							elseif (!Uri::isInternal($return))
+							{
+								// Don't redirect to an external URL.
+								$return = '';
+							}
 
-						// Set the return URL if empty.
-						if (empty($return))
-						{
-							$return = 'index.php?option=com_users&view=profile';
-						}
+							// Set the return URL if empty.
+							if (empty($return))
+							{
+								$return = 'index.php?option=com_users&view=profile';
+							}
 
-						// Set the return URL in the user state to allow modification by plugins
-						$app->setUserState('users.login.form.return', $return);
+							// Set the return URL in the user state to allow modification by plugins
+							$app->setUserState('users.login.form.return', $return);
+						}
+						else
+						{
+							$options = [
+								'action'   => 'core.login.admin',
+							];
+
+							if (!Uri::isInternal($return)
+								|| strpos($return, 'tmpl=component') !== false)
+							{
+								$return = 'index.php';
+							}
+						}
 
 						PluginHelper::importPlugin('user');
 						$eventClassName = self::getEventClassByEventName('onUserLogin');
@@ -417,27 +435,34 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 							throw new Exception();
 						}
 
-						if ($options['remember'] == true)
+						if ($isFrontend
+							&& $options['remember'] == true)
 						{
 							$app->setUserState('rememberLogin', true);
 						}
 
 						Log::add(sprintf('Redirect %s to after-login page', $accountAddress), Log::INFO, 'concordium.system');
 
-						$result = [
-							'redirect' => Route::_($app->getUserState('users.login.form.return'), false),
-						];
+						if ($isFrontend)
+						{
+							$result['redirect'] = Route::_($app->getUserState('users.login.form.return'), false);
+						}
+						else
+						{
+							$result['redirect'] = $return;
+						}
 					}
 					else
 					{
-						$app->enqueueMessage(Text::_('PLG_SYSTEM_CONCORDIUM_PLEASE_FINISH_REGISTRATION'));
-						$app->getSession()->set('application.queue', $app->getMessageQueue());
-
-						Log::add(sprintf('Redirect %s to registration page', $accountAddress), Log::INFO, 'concordium.system');
-
-						$result = [
-							'redirect' => Route::_('index.php?option=com_users&view=registration', false),
-						];
+						if (!$isFrontend
+							|| ComponentHelper::getParams('com_users')->get('allowUserRegistration') == 0)
+						{
+							throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
+						}
+						else
+						{
+							throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_NOT_FOUND_REGISTRATION_ALLOWED'));
+						}
 					}
 					break;
 			}
@@ -446,7 +471,19 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 		{
 			Log::add(sprintf("Error: %s", $e->getMessage()), Log::ERROR, 'concordium.system');
 			http_response_code(500);
-			echo new JsonResponse($e);
+			$resp = new JsonResponse($e);
+
+			if ($this->getApplication()->get('debug'))
+			{
+				$resp->trace = $e->getTrace();
+
+				if ($e instanceof ResponseException)
+				{
+					$resp->response = $e->getResponse();
+				}
+			}
+
+			echo $resp;
 
 			$app->close();
 		}
@@ -464,7 +501,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	 */
 	public function onContentPrepareForm(Event $event): void
 	{
-		if (!$this->getApplication()->getSession()->get('plg_system_concordium.auth', false))
+		if (!$this->getAccountAddress())
 		{
 			return;
 		}
@@ -478,8 +515,6 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 		}
 
 		$form->removeField('captcha');
-		$form->setFieldAttribute('password1', 'required', 'false');
-		$form->setFieldAttribute('password2', 'required', 'false');
 	}
 
 	/**
@@ -490,26 +525,22 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	 */
 	public function onUserAfterSave(Event $event): void
 	{
-		$accountAddress = $this->getApplication()->getSession()->get('plg_system_concordium.auth', false);
+		$accountAddress = $this->getAccountAddress();
 
-		if (!$accountAddress)
+		if (!$accountAddress
+			|| $this->getUserId())
 		{
 			return;
 		}
 
-		$nonceTable = new NonceTable($this->getDatabase());
-
-		if (!$nonceTable->load(['account_address' => $accountAddress]))
-		{
-			throw new Exception('Account not found');
-		}
-
 		list($getProperties) = $event->getArguments();
 
-		if (!$nonceTable->save(['user_id' => $getProperties['id']]))
+		if (empty($getProperties['id']))
 		{
-			throw new Exception($nonceTable->getError());
+			return;
 		}
+
+		$this->linkUserToAccountAddress($getProperties['id']);
 	}
 
 	/**
@@ -522,6 +553,112 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 	protected function getNonceMessage(string $nonce): string
 	{
 		return Text::sprintf('PLG_SYSTEM_CONCORDIUM_NONCE_MESSAGE', $nonce);
+	}
+
+	/**
+	 * @since __DEPLOY_VERSION__
+	 */
+	public function onUserLogout(): void
+	{
+		if (!$this->getAccountAddress())
+		{
+			return;
+		}
+
+		$this->getApplication()->getSession()->set('plg_system_concordium.account_address');
+		$this->getApplication()->getSession()->set('plg_system_concordium.user_id');
+	}
+
+	/**
+	 * @param int $userId
+	 *
+	 *
+	 * @throws Exception
+	 * @since __DEPLOY_VERSION__
+	 */
+	protected function linkUserToAccountAddress(int $userId): void
+	{
+		$accountAddress = $this->getAccountAddress();
+
+		if (!$accountAddress)
+		{
+			return;
+		}
+
+		$nonceTable = new NonceTable($this->getDatabase());
+
+		if (!$nonceTable->load(['account_address' => $accountAddress]))
+		{
+			throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_CONCORDIUM_ACCOUNT_NOT_FOUND'));
+		}
+
+		// Once user assigned then do not override it
+		if ($nonceTable->get('user_id'))
+		{
+			return;
+		}
+
+		if (!$nonceTable->save(['user_id' => $userId]))
+		{
+			throw new Exception($nonceTable->getError());
+		}
+
+		$this->getApplication()->getSession()->set('plg_system_concordium.user_id', $userId);
+		$this->getApplication()->enqueueMessage(Text::_('PLG_SYSTEM_CONCORDIUM_ACCOUNT_LINED'));
+	}
+
+	/**
+	 * @param Event $event
+	 *
+	 *
+	 * @throws Exception
+	 * @since __DEPLOY_VERSION__
+	 */
+	public function onUserLogin(Event $event): void
+	{
+		$accountAddress = $this->getAccountAddress();
+
+		if (!$accountAddress
+			|| $this->getUserId())
+		{
+			return;
+		}
+
+		list($user) = $event->getArguments();
+
+		if (empty($user['username']))
+		{
+			return;
+		}
+
+		$id = (int) UserHelper::getUserId($user['username']);
+
+		if (!$id)
+		{
+			return;
+		}
+
+		$this->linkUserToAccountAddress($id);
+	}
+
+	/**
+	 * @return null|string
+	 *
+	 * @since __DEPLOY_VERSION__
+	 */
+	protected function getAccountAddress(): ?string
+	{
+		return $this->getApplication()->getSession()->get('plg_system_concordium.account_address');
+	}
+
+	/**
+	 * @return string|null
+	 *
+	 * @since __DEPLOY_VERSION__
+	 */
+	protected function getUserId(): ?string
+	{
+		return $this->getApplication()->getSession()->get('plg_system_concordium.user_id');
 	}
 
 	/**
@@ -542,7 +679,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 			return [];
 		}
 
-		if (!$app->isClient('site'))
+		if (!in_array($app->getName(), ['site', 'administrator']))
 		{
 			return [];
 		}
@@ -552,6 +689,8 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 			'onContentPrepareForm' => 'onContentPrepareForm',
 			'onAfterRoute'         => 'onAfterRoute',
 			'onUserAfterSave'      => 'onUserAfterSave',
+			'onUserLogout'         => 'onUserLogout',
+			'onUserLogin'          => 'onUserLogin',
 		];
 	}
 }
