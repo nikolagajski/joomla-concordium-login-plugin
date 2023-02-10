@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "outDir": "./js",
+    "outDir": "./media/plg_system_concordium/js",
     "strict": true,
     "target": "es5",
     "module": "commonjs",
@@ -10,5 +10,6 @@
     "sourceMap": true,
     "downlevelIteration": true,
     "allowSyntheticDefaultImports": true
-  }
+  },
+  "include": ["media/plg_system_concordium/src/**/*"]
 }
