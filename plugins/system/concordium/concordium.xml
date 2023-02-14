@@ -36,11 +36,28 @@
 	<config>
 		<fields name="params">
 			<fieldset name="basic">
+				<field type="radio"
+					   name="server_type"
+					   label="PLG_SYSTEM_CONCORDIUM_SERVER_TYPE"
+					   default="gRPC">
+					<option value="gRPC">gRPC</option>
+					<option value="JSON-RPC">JSON-RPC</option>
+				</field>
 				<field type="text"
-					   name="hostname"
-					   label="PLG_SYSTEM_CONCORDIUM_HOSTNAME"
-					   description="PLG_SYSTEM_CONCORDIUM_HOSTNAME_DESC"
+					   showon="server_type:JSON-RPC"
+					   name="json_hostname"
+					   label="PLG_SYSTEM_CONCORDIUM_JSON_HOSTNAME"
+					   description="PLG_SYSTEM_CONCORDIUM_JSON_HOSTNAME_DESC"
 					   required="true"
+					   default="https://example.com:9095"
+				/>
+				<field type="text"
+					   showon="server_type:gRPC"
+					   name="g_hostname"
+					   label="PLG_SYSTEM_CONCORDIUM_G_HOSTNAME"
+					   description="PLG_SYSTEM_CONCORDIUM_G_HOSTNAME_DESC"
+					   required="true"
+					   default="example.com:10000"
 				/>
 				<field type="text"
 					   name="nonce_expired"

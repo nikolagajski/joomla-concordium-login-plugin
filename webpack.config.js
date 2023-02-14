@@ -2,7 +2,8 @@ const path = require('path');
 const CompressionPlugin = require("compression-webpack-plugin");
 
 module.exports = {
-	entry: './media/plg_system_concordium/src/index.ts',
+	entry: './index.ts',
+	context: path.resolve(__dirname, 'media/plg_system_concordium/src/'),
 	module: {
 		rules: [
 			{

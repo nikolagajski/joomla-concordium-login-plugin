@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c01e087cc30f01af248ebaee2892f2aa",
+    "content-hash": "f86a28bc4d6075b5cc209204aa2c449b",
     "packages": [
         {
             "name": "aesirxio/concordium-lib",
@@ -147,6 +147,54 @@
             "time": "2021-11-19T08:13:51+00:00"
         },
         {
+            "name": "jsonrpc/jsonrpc",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/johnstevenson/jsonrpc.git",
+                "reference": "8cd385ae8b10bfe74d52a22661c8a0511b04fd48"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/johnstevenson/jsonrpc/zipball/8cd385ae8b10bfe74d52a22661c8a0511b04fd48",
+                "reference": "8cd385ae8b10bfe74d52a22661c8a0511b04fd48",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.3.0"
+            },
+            "default-branch": true,
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "JsonRpc": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "John Stevenson",
+                    "email": "john-stevenson@blueyonder.co.uk"
+                }
+            ],
+            "description": "JSON-RPC 2.0 client/server implementation",
+            "homepage": "http://github.com/johnstevenson/jsonrpc",
+            "keywords": [
+                "api",
+                "json",
+                "json-rpc",
+                "rpc"
+            ],
+            "support": {
+                "issues": "https://github.com/johnstevenson/jsonrpc/issues",
+                "source": "https://github.com/johnstevenson/jsonrpc/tree/master"
+            },
+            "time": "2013-04-12T10:33:44+00:00"
+        },
+        {
             "name": "stephenhill/base58",
             "version": "v1.1.5.x-dev",
             "source": {
@@ -193,7 +241,8 @@
     "aliases": [],
     "minimum-stability": "dev",
     "stability-flags": {
-        "aesirxio/concordium-lib": 20
+        "aesirxio/concordium-lib": 20,
+        "jsonrpc/jsonrpc": 20
     },
     "prefer-stable": false,
     "prefer-lowest": false,

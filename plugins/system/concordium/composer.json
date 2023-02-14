@@ -5,21 +5,13 @@
   "license": "proprietary",
   "authors": [],
   "require": {
-    "grpc/grpc": "~1.42.0",
-    "google/protobuf": "~3.21.12",
-    "stephenhill/base58": "^1.1",
-    "aesirxio/concordium-lib": "dev-develop"
+    "aesirxio/concordium-lib": "dev-develop",
+    "jsonrpc/jsonrpc": "dev-master"
   },
   "repositories": [
     {
       "type": "vcs",
       "url": "https://github.com/aesirxio/concordium-php-lib"
     }
-  ],
-  "autoload": {
-    "psr-4": {
-      "Concordium\\": "grpc/Concordium/",
-      "GPBMetadata\\": "grpc/GPBMetadata/"
-    }
-  }
+  ]
 }
