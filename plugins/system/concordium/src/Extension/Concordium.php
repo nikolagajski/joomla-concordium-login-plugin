@@ -273,47 +273,77 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 
 					$app->getSession()->set('plg_system_concordium.user_id', $nonceTable->get('user_id'));
 
-					$client = new P2PClient(
-						$this->params->get('hostname'),
-						[
-							'credentials'     => \Grpc\ChannelCredentials::createInsecure(),
-							'update_metadata' => function (array $metadata): array {
-								$metadata['authentication'] = ['rpcadmin'];
+					switch ($this->params->get('server_type'))
+					{
+						case 'JSON-RPC':
+							$client = new \JsonRpc\Client($this->params->get('json_hostname'));
 
-								return $metadata;
+							if (!$client->call('getConsensusStatus', []))
+							{
+								throw new ResponseException($client->error, Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
 							}
-						]
-					);
 
-					$opt = [
-						// 5 seconds in milliseconds
-						'timeout' => 5000000,
-					];
+							if (!$client->call(
+								'getAccountInfo', [
+									'address' => $accountAddress,
+									'blockHash' => $client->result->lastFinalizedBlock
+								]
+							))
+							{
+								throw new ResponseException($client->error, Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
+							}
 
-					/** @var \Concordium\JsonResponse $res */
-					list($res, $res2) = $client->GetConsensusStatus(new \Concordium\PBEmpty, [], $opt)->wait();
+							$res = json_decode(json_encode($client->result), true);
 
-					if (!$res || $res->getValue() == 'null')
-					{
-						throw new ResponseException($res2, Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
-					}
+							break;
+						case 'gRPC':
+							$client = new P2PClient(
+								$this->params->get('g_hostname'),
+								[
+									'credentials'     => \Grpc\ChannelCredentials::createInsecure(),
+									'update_metadata' => function (array $metadata): array {
+										$metadata['authentication'] = ['rpcadmin'];
 
-					Log::add('Got consensus status', Log::INFO, 'concordium.system');
+										return $metadata;
+									}
+								]
+							);
 
-					$status = json_decode($res->getValue(), true);
+							$opt = [
+								// 3 seconds in milliseconds
+								'timeout' => 3000000,
+							];
 
-					/** @var \Concordium\JsonResponse $res3 */
-					list($res, $res2) = $client->GetAccountInfo(
-						(new \Concordium\GetAddressInfoRequest)
-							->setAddress($accountAddress)
-							->setBlockHash($status['lastFinalizedBlock']),
-						[],
-						$opt
-					)->wait();
+							/** @var \Concordium\JsonResponse $res */
+							list($res, $res2) = $client->GetConsensusStatus(new \Concordium\PBEmpty, [], $opt)->wait();
 
-					if (!$res || $res->getValue() == 'null')
-					{
-						throw new ResponseException($res2, Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
+							if (!$res || $res->getValue() == 'null')
+							{
+								throw new ResponseException($res2, Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
+							}
+
+							Log::add('Got consensus status', Log::INFO, 'concordium.system');
+
+							$status = json_decode($res->getValue(), true);
+
+							/** @var \Concordium\JsonResponse $res3 */
+							list($res, $res2) = $client->GetAccountInfo(
+								(new \Concordium\GetAddressInfoRequest)
+									->setAddress($accountAddress)
+									->setBlockHash($status['lastFinalizedBlock']),
+								[],
+								$opt
+							)->wait();
+
+							if (!$res || $res->getValue() == 'null')
+							{
+								throw new ResponseException($res2, Text::_('PLG_SYSTEM_CONCORDIUM_CLIENT_RETURNS_NOTHING'));
+							}
+
+							$res = json_decode($res->getValue(), true);
+							break;
+						default:
+							throw new Exception('Unknown RPC server type');
 					}
 
 					Log::add(sprintf('Got account info for %s', $accountAddress), Log::INFO, 'concordium.system');
@@ -321,7 +351,7 @@ class Concordium extends CMSPlugin implements SubscriberInterface
 					if (!Helper::verifyMessageSignature(
 						$this->getNonceMessage($nonceTable->get('nonce')),
 						new AccountTransactionSignature($signed),
-						new AccountInfo(json_decode($res->getValue(), true))
+						new AccountInfo($res)
 					))
 					{
 						throw new Exception(Text::_('PLG_SYSTEM_CONCORDIUM_VALIDATION_IS_FAILED'));

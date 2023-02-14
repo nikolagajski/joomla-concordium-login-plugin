@@ -5,7 +5,8 @@
   "license": "proprietary",
   "authors": [],
   "require": {
-    "aesirxio/concordium-lib": "dev-develop"
+    "aesirxio/concordium-lib": "dev-develop",
+    "jsonrpc/jsonrpc": "dev-master"
   },
   "repositories": [
     {
