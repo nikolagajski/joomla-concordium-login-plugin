@@ -1,4 +1,4 @@
-FROM php:7.2-alpine3.12
+FROM php:7.2-cli-alpine3.12
 
 RUN apk add --no-cache nodejs npm zip zlib-dev;
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/

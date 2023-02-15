@@ -13,3 +13,11 @@ watch:
 # Just open console the container
 sh:
 	docker-compose run php-npm sh
+
+# Down all
+down:
+	docker-compose down --remove-orphans
+
+# Rebuild Dockerfile
+docker-build:
+	docker-compose build
